@@ -1,6 +1,6 @@
 ## **MSSQL log based CDC - streaming to java**
 
-*@master 브랜치로 가면 Source가 있습니다.*
+*@master 브랜치로 가면 Source가 있습니다.*  
 *해당 코드는 DML 캐치하는 수준의 코드입니다. 많이 부족하지만 감안해서 봐주세요.*
 
 **트랜잭션 로그를 읽고 Schema_Table_CT 테이블에 변경 데이터를 캡처합니다.**
