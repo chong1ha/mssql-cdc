@@ -21,13 +21,19 @@ import java.util.Map;
 @Component
 public class CDCStreamingRunner implements ApplicationRunner {
 
-    /* CDC 스키마의 해당 테이블에 접근해 변경 데이터를 지속적으로 가져오도록 하는 쿼리문 */
-    private static final String CDC_QUERY = "SELECT * FROM cdc.fn_cdc_get_all_changes_dbo_cdc_table (?, ?, 'all')";
+    /**
+     * CDC 스키마의 해당 테이블에 접근해 변경 데이터를 지속적으로 가져오도록 하는 쿼리문
+     *   -> 마지막으로 가져온 LSN 이후에 발생한 변경 사항만 가져오기
+     */
+    private static final String CDC_QUERY = "SELECT * FROM cdc.fn_cdc_get_all_changes_dbo_cdc_table (?, ?, 'all') WHERE __$start_lsn > ? ORDER BY __$seqval";
+    /* 시작 LSN(Log Sequence Number) */
+    private static final String START_LSN = "SELECT CONVERT(BIGINT, sys.fn_cdc_get_min_lsn('dbo_cdc_table'))";
+    /* 마지막 LSN */
+    private static final String END_LSN = "SELECT CONVERT(BIGINT, sys.fn_cdc_get_max_lsn())";
+    /* 이전에 가져온 마지막 LSN 값을 저장하는 변수 */
+    private long startLsn = 0L;
     /* CDC 컬럼명 가져오기 */
     private static final String COLUMN_QUERY = "SELECT column_name FROM cdc.captured_columns;";
-    private static final String START_LSN = "SELECT CONVERT(BIGINT, sys.fn_cdc_get_min_lsn('dbo_cdc_table'))";
-    private static final String END_LSN = "SELECT CONVERT(BIGINT, sys.fn_cdc_get_max_lsn())";
-
 
     private final JdbcTemplate jdbcTemplate;
     @Autowired
@@ -39,17 +45,15 @@ public class CDCStreamingRunner implements ApplicationRunner {
     public void run(ApplicationArguments args) throws Exception {
 
         // 최초 실행시 CDC 테이블의 시작 LSN 값을 가져옴
-        Long startLsn = jdbcTemplate.queryForObject(START_LSN, Long.class);
+        startLsn = jdbcTemplate.queryForObject(START_LSN, Long.class);
         // 컬럼명 조회
         List<String> columnNames = jdbcTemplate.queryForList(COLUMN_QUERY, String.class);
-
         while (true) {
             // 최신 LSN 값을 가져와서 쿼리 파라미터로 설정
             Long endLsn = jdbcTemplate.queryForObject(END_LSN, Long.class);
             if (endLsn > startLsn) { // 최신 데이터만 가져오기
-
                 // CDC 변경 데이터 가져오기
-                List<Map<String, Object>> results = jdbcTemplate.queryForList(CDC_QUERY, startLsn, endLsn);
+                List<Map<String, Object>> results = jdbcTemplate.queryForList(CDC_QUERY, startLsn, endLsn, startLsn);
                 for (Map<String, Object> row : results) {
                     /**
                      * [CDC 테이블 컬럼]
@@ -67,12 +71,19 @@ public class CDCStreamingRunner implements ApplicationRunner {
                      *     만약 변경 행에서 특정 열만 수정했을 경우, 비어있지 않고 수정된 열의 비트맵 정보가 저장됨
                      *     하지만, 변경 행에서 모든 열을 수정했을 경우, 값은 비어있을 수 있음
                      */
-                    System.out.println(row);
+                    int operation = (int) row.get("__$operation");
+                    if (operation == 2) { // INSERT operation
+                        System.out.println(row);
+                    } else if (operation == 1) { // DELETE operation
+                        System.out.println(row);
+                    } else if (operation == 4) { // UPDATE operation
+                        System.out.println(row);
+                    }
 
                     // [세부 1] Operation 값 출력
                     int operationCode = (int) row.get("__$operation");
-                    CDCOperationType operation = CDCOperationType.values()[operationCode - 1];
-                    System.out.println("--> Operation = "+ operation);
+                    CDCOperationType op = CDCOperationType.values()[operationCode - 1];
+                    System.out.println("--> Operation = "+ op);
 
                     // [세부 2] seqval 값 출력
                     byte[] seqvalBytes = (byte[]) row.get("__$seqval");
