@@ -22,20 +22,21 @@ import java.util.Map;
 public class CDCStreamingRunner implements ApplicationRunner {
 
     /**
-     * CDC 스키마의 해당 테이블에 접근해 변경 데이터를 지속적으로 가져오도록 하는 쿼리문
+     * CDC 스키마의 해당 테이블에 접근해 변경 데이터를 지속적으로 가져오도록 하는 쿼리문<br>
      *   -> 마지막으로 가져온 LSN 이후에 발생한 변경 사항만 가져오기
      */
     private static final String CDC_QUERY = "SELECT * FROM cdc.fn_cdc_get_all_changes_dbo_cdc_table (?, ?, 'all') WHERE __$start_lsn > ? ORDER BY __$seqval";
-    /* 시작 LSN(Log Sequence Number) */
+    /** 시작 LSN(Log Sequence Number) */
     private static final String START_LSN = "SELECT CONVERT(BIGINT, sys.fn_cdc_get_min_lsn('dbo_cdc_table'))";
-    /* 마지막 LSN */
+    /** 마지막 LSN */
     private static final String END_LSN = "SELECT CONVERT(BIGINT, sys.fn_cdc_get_max_lsn())";
-    /* 이전에 가져온 마지막 LSN 값을 저장하는 변수 */
+    /** 이전에 가져온 마지막 LSN 값을 저장하는 변수 */
     private long startLsn = 0L;
-    /* CDC 컬럼명 가져오기 */
+    /** CDC 컬럼명 가져오기 */
     private static final String COLUMN_QUERY = "SELECT column_name FROM cdc.captured_columns;";
 
     private final JdbcTemplate jdbcTemplate;
+
     @Autowired
     public CDCStreamingRunner(JdbcTemplate jdbcTemplate) {
         this.jdbcTemplate = jdbcTemplate;
@@ -48,14 +49,19 @@ public class CDCStreamingRunner implements ApplicationRunner {
         startLsn = jdbcTemplate.queryForObject(START_LSN, Long.class);
         // 컬럼명 조회
         List<String> columnNames = jdbcTemplate.queryForList(COLUMN_QUERY, String.class);
+
         while (true) {
+
             // 최신 LSN 값을 가져와서 쿼리 파라미터로 설정
             Long endLsn = jdbcTemplate.queryForObject(END_LSN, Long.class);
+
             if (endLsn > startLsn) { // 최신 데이터만 가져오기
+
                 // CDC 변경 데이터 가져오기
                 List<Map<String, Object>> results = jdbcTemplate.queryForList(CDC_QUERY, startLsn, endLsn, startLsn);
+
                 for (Map<String, Object> row : results) {
-                    /**
+                    /*
                      * [CDC 테이블 컬럼]
                      *   => __$start_lsn: CDC 데이터의 시작 LSN 값
                      *   => __$end_lsn: CDC 데이터의 끝 LSN 값
@@ -72,10 +78,13 @@ public class CDCStreamingRunner implements ApplicationRunner {
                      *     하지만, 변경 행에서 모든 열을 수정했을 경우, 값은 비어있을 수 있음
                      */
                     int operation = (int) row.get("__$operation");
+
                     if (operation == 2) { // INSERT operation
                         System.out.println(row);
+
                     } else if (operation == 1) { // DELETE operation
                         System.out.println(row);
+
                     } else if (operation == 4) { // UPDATE operation
                         System.out.println(row);
                     }
@@ -92,7 +101,9 @@ public class CDCStreamingRunner implements ApplicationRunner {
 
                     // [세부 3] update mask 값 출력
                     byte[] updateMaskBytes = (byte[]) row.get("__$update_mask");
+
                     for (int i = 0; i < updateMaskBytes.length * 8; i++) {
+
                         if (((updateMaskBytes[i / 8] >> (i % 8)) & 0x01) == 0x01) {
                             System.out.println("--> Column[" + i + "] "+ columnNames.get(i) + " has been updated.");
                         }

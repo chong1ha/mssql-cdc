@@ -16,14 +16,16 @@ public class DataSourceConfiguration {
 
     @Bean
     public DataSource getDataSource() {
-        /**
+        /*
          * 현재 하드코딩된 상태
          */
         DataSourceBuilder dataSourceBuilder = DataSourceBuilder.create();
+
         dataSourceBuilder.url("jdbc:sqlserver://localhost:1433;databaseName=SQL2019CDC;encrypt=true;trustServerCertificate=true");
         dataSourceBuilder.username("sa");
         dataSourceBuilder.password("password1!");
         dataSourceBuilder.driverClassName("com.microsoft.sqlserver.jdbc.SQLServerDriver");
+
         return dataSourceBuilder.build();
     }
 }
